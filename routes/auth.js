@@ -32,7 +32,7 @@ router.post('/login', (req, res) => {
 
       // アカウントロックの確認
       if (user.is_locked) {
-        if (user.lock_until && new Date(user.lock_until) > now) {
+        if (new Date(user.lock_until) > now) {
           // まだ期限内であればロック継続
           return res.status(403).json({ error: "アカウントがロックされています。しばらく時間をおいてからお試しください。" });
         } else {
@@ -40,6 +40,7 @@ router.post('/login', (req, res) => {
           db.run("UPDATE users SET is_locked = 0, lock_until = NULL, failed_attempts = 0 WHERE user_id = ?", [user_id]);
           // 処理を続行させるため、この時点でのメモリ上の変数を更新
           user.is_locked = 0;
+          user.failed_attempts = 0;
         }
       }
 
