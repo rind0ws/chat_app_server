@@ -30,6 +30,14 @@ router.post('/login', (req, res) => {
 
       const now = new Date();
 
+      if (err) {
+        return res.status(500).json({ error: "データベースエラーが発生しました。" });
+      }
+
+      if (!user) {
+        return res.status(401).json({ error: "ユーザーIDまたはパスワードが正しくありません。" });
+      }
+
       // アカウントロックの確認
       if (user.is_locked) {
         if (new Date(user.lock_until) > now) {
