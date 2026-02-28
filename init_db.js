@@ -10,14 +10,15 @@ async function init() {
   const userHash = await bcrypt.hash('user1234', saltRounds);
 
   db.serialize(() => {
-    // 1. usersテーブルの作成
+    // usersテーブルの作成
     db.run(`CREATE TABLE IF NOT EXISTS users (
       user_id TEXT PRIMARY KEY,
       user_name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL,
       is_locked INTEGER DEFAULT 0,
-      lock_until DATETIME
+      lock_until DATETIME,
+      failed_attempts INTEGER DEFAULT 0
     )`);
 
     // テストデータの挿入
