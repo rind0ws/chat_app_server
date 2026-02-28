@@ -56,10 +56,19 @@ router.post('/login', (req, res) => {
         // ランダムトークンの生成
         const randomToken = uuidv4();
         const prefix = user.role === 'ADMIN' ? 'adm_' : 'usr_';
-        
-        // フロントエンドに返すResponseオブジェクト
+        const fullToken = `${prefix}${randomToken}`;
+
+        // クッキーにトークンをセット
+        res.cookie('auth_token', fullToken, {
+          httpOnly: false,
+          secure: false,
+          maxAge: 60 * 60000, // 1時間
+          sameSite: 'lax',
+          path: '/'
+        });
+
+        // レスポンス情報の送信
         res.json({
-          token: `${prefix}${randomToken}`,
           Response: {
             user_id: user.user_id,
             user_name: user.user_name,
