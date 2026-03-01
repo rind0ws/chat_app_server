@@ -10,22 +10,32 @@ router.get('/:userId', (req, res) => {
   if (!myId) {
     return res.status(400).json([]);
   }
-
-  // データベースからメッセージ履歴を取得
-  const sql = `
-    SELECT * FROM messages 
-    WHERE ((from_user_id = ? AND to_user_id = ?) 
-       OR (from_user_id = ? AND to_user_id = ?))
-       AND deleted_by_sender = 0
-    ORDER BY created_at ASC
+  const updateSql = `
+    UPDATE messages 
+    SET is_read = 1 
+    WHERE from_user_id = ? AND to_user_id = ? AND is_read = 0
   `;
-  db.all(sql, [myId, targetId, targetId, myId], (err, rows) => {
-if (err) {
-      console.error("履歴取得失敗:", err);
-      return res.status(500).json([]); // エラー時は空配列を返す
+  db.run(updateSql, [targetId, myId], function(err) {
+    if (err) {
+      console.error("既読更新失敗:", err);
     }
-    // rows が null や undefined の場合でも空配列を返すようにする
-    res.json(rows || []);
+      
+    // データベースからメッセージ履歴を取得
+    const sql = `
+      SELECT * FROM messages 
+      WHERE ((from_user_id = ? AND to_user_id = ?) 
+        OR (from_user_id = ? AND to_user_id = ?))
+        AND deleted_by_sender = 0
+      ORDER BY created_at ASC
+    `;
+    
+    db.all(sql, [myId, targetId, targetId, myId], (err, rows) => {
+    if (err) {
+        console.error("履歴取得失敗:", err);
+        return res.status(500).json([]);
+      }
+      res.json(rows || []);
+    });
   });
 });
 
