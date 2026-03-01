@@ -26,9 +26,10 @@ router.get('/:userId', (req, res) => {
       WHERE ((from_user_id = ? AND to_user_id = ?) 
         OR (from_user_id = ? AND to_user_id = ?))
         AND deleted_by_sender = 0
+        AND deleted_by_admin = 0
       ORDER BY created_at ASC
     `;
-    
+
     db.all(sql, [myId, targetId, targetId, myId], (err, rows) => {
     if (err) {
         console.error("履歴取得失敗:", err);
@@ -89,6 +90,19 @@ router.delete('/:messageId', (req, res) => {
     }
 
     res.json({ message: "メッセージを削除しました" });
+  });
+});
+
+// DELETE /api/messages (全メッセージ削除 - 管理者用)
+router.delete('/', (req, res) => {
+  const sql = `UPDATE messages SET deleted_by_admin = 1`;
+
+  db.run(sql, [], function(err) {
+    if (err) {
+      console.error("全メッセージ削除エラー:", err);
+      return res.status(500).json({ error: "全メッセージの削除に失敗しました。" });
+    }
+    res.json({ message: `全 ${this.changes} 件のメッセージを削除しました。` });
   });
 });
 
