@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 const db = require('../database');
 
 // ADMIN権限のみアクセス可能なユーザー管理API
@@ -17,7 +18,34 @@ router.get('/', (req, res) => {
 
 // POST /api/users (新規作成)
 router.post('/', (req, res) => {
-  res.json({ message: "ユーザーを新規作成しました" });
+  const { user_id, password, role } = req.body;
+  // バリデーション
+  if (!user_id || !password || !role) {
+    return res.status(400).json({ error: "必須項目が不足しています。" });
+  }
+  try {
+    const saltRounds = 10;
+    const password_hash = bcrypt.hashSync(password, saltRounds);
+    // データベースへ挿入
+    const sql = `
+      INSERT INTO users (user_id, password_hash, role, is_locked, lock_until, failed_attempts)
+      VALUES (?, ?, ?, 0, NULL, 0)
+    `;
+    
+    db.run(sql, [user_id, password_hash, role], function(err) {
+      if (err) {
+        if (err.message.includes("UNIQUE constraint failed")) {
+          return res.status(400).json({ error: "このユーザーIDは既に存在します。別のIDを入力してください。" });
+        }
+        console.error("ユーザーの新規作成に失敗:", err);
+        return res.status(500).json({ error: "ユーザーの新規作成に失敗しました。" });
+      }
+      res.json({ message: "ユーザーを新規作成しました", user_id: user_id });
+    });
+  } catch (err) {
+    console.error("ユーザーの新規作成に失敗:", err);
+    res.status(500).json({ error: "ユーザーの新規作成に失敗しました。" });
+  }
 });
 
 // DELETE /api/users/:userId (削除)
