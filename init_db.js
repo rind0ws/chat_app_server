@@ -19,6 +19,19 @@ async function init() {
       lock_until DATETIME,
       failed_attempts INTEGER DEFAULT 0
     )`);
+    // messagesテーブルの作成
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+      message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_read INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_by_sender INTEGER DEFAULT 0,
+      deleted_by_admin INTEGER DEFAULT 0,
+      FOREIGN KEY (from_user_id) REFERENCES users (user_id),
+      FOREIGN KEY (to_user_id) REFERENCES users (user_id)
+    )`);
 
     // テストデータの挿入
     const stmt = db.prepare("INSERT OR REPLACE INTO users (user_id, password_hash, role, is_locked, lock_until, failed_attempts) VALUES (?, ?, ?, ?, ?, ?)");
