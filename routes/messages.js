@@ -44,8 +44,8 @@ router.post('/', (req, res) => {
   }
   // データベースに新しいメッセージを挿入
   const sql = `
-    INSERT INTO messages (from_user_id, to_user_id, message, is_read) 
-    VALUES (?, ?, ?, 0)
+    INSERT INTO messages (from_user_id, to_user_id, message, is_read, deleted_by_sender, deleted_by_admin) 
+    VALUES (?, ?, ?, 0, 0, 0)
   `;
   db.run(sql, [from_user_id, to_user_id, message], function(err) {
     if (err) {
@@ -59,7 +59,7 @@ router.post('/', (req, res) => {
 
 // DELETE /api/messages/:messageId (メッセージ削除)
 router.delete('/:messageId', (req, res) => {
-  const messageId = req.params.id;
+  const messageId = req.params.messageId;
 
   // 物理削除を行う例（要件に応じて deleted_by_sender などのフラグ更新に書き換えも可能）
   const sql = `
