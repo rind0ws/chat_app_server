@@ -50,7 +50,31 @@ router.post('/', (req, res) => {
 
 // DELETE /api/users/:userId (削除)
 router.delete('/:userId', (req, res) => {
-  res.json({ message: `ユーザー ${req.params.userId} を削除しました` });
+const targetId = req.params.userId;
+
+  // 管理者アカウントを削除不可
+  if (targetId === 'admin') {
+    return res.status(400).json({ error: "初期管理者アカウントは削除できません。" });
+  }
+
+  // データベースから削除
+  const sql = "DELETE FROM users WHERE user_id = ?";
+  
+  db.run(sql, [targetId], function(err) {
+    if (err) {
+      console.error("ユーザー削除エラー:", err);
+      return res.status(500).json({ error: "ユーザーの削除に失敗しました。" });
+    }
+
+    console.log(`ユーザー「${targetId}」を削除しました。削除された行数: ${this.changes}`);
+    // 削除対象が存在したかチェック
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "指定されたユーザーが見つかりませんでした。" });
+    }
+
+    // 成功レスポンス
+    res.json({ message: `ユーザー「${targetId}」を削除しました` });
+  });
 });
 
 module.exports = router;
