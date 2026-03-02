@@ -21,28 +21,21 @@ router.post('/login', (req, res) => {
     password.length > 100 || // パスワードが長すぎる
     !/^[a-zA-Z0-9]+$/.test(password) // パスワードが英数字以外を含む
   ) {
-    return res.status(400).json({ error: "入力内容が不正です。" });
+    return res.status(400).json({ code: "ERR_INVALID_INPUT" });
   }
 
-  try {
-    // sqliteからユーザーを検索
+  db.serialize(() => {
     db.get("SELECT * FROM users WHERE user_id = ?", [user_id], async (err, user) => {
 
+      if (err) return res.status(500).json({ code: "ERR_DB_ERROR" });
+      if (!user) return res.status(401).json({ code: "ERR_INVALID_CREDENTIALS" });
       const now = new Date();
-
-      if (err) {
-        return res.status(500).json({ error: "データベースエラーが発生しました。" });
-      }
-
-      if (!user) {
-        return res.status(401).json({ error: "ユーザーIDまたはパスワードが正しくありません。" });
-      }
 
       // アカウントロックの確認
       if (user.is_locked) {
         if (new Date(user.lock_until) > now) {
           // まだ期限内であればロック継続
-          return res.status(403).json({ error: "アカウントがロックされています。しばらく時間をおいてからお試しください。" });
+          return res.status(423).json({ code: "ERR_ACCOUNT_LOCKED" });
         } else {
           // 期限を過ぎていればロック解除（DB更新）
           db.run("UPDATE users SET is_locked = 0, lock_until = NULL, failed_attempts = 0 WHERE user_id = ?", [user_id]);
@@ -57,8 +50,7 @@ router.post('/login', (req, res) => {
       const isMatch = await bcrypt.compare(password, user.password_hash);
 
       if (isMatch) {
-        // 認証成功
-        // 失敗カウントをリセット
+        // 認証成功：失敗カウントとロックをリセット
         db.run("UPDATE users SET failed_attempts = 0, is_locked = 0, lock_until = NULL WHERE user_id = ?", [user_id]);
         
         // ランダムトークンの生成
@@ -79,7 +71,6 @@ router.post('/login', (req, res) => {
         res.json({
           Response: {
             user_id: user.user_id,
-            user_name: user.user_name,
             role: user.role
           }
         });
@@ -90,21 +81,19 @@ router.post('/login', (req, res) => {
           const lockUntil = new Date(now.getTime() + LOCK_TIME_MINUTES * 60000).toISOString();
           db.run("UPDATE users SET failed_attempts = ?, is_locked = 1, lock_until = ? WHERE user_id = ?", [newAttempts, lockUntil, user_id]);
           
-          return res.status(403).json({ error: "ログインに連続して失敗したため、アカウントを一時ロックしました。" });
+          return res.status(423).json({ code: "ERR_ACCOUNT_LOCKED" });
         } else {
           db.run("UPDATE users SET failed_attempts = ? WHERE user_id = ?", [newAttempts, user_id]);
-          res.status(401).json({ error: "ユーザーIDまたはパスワードが正しくありません。" });
+          res.status(401).json({ code: "ERR_INVALID_CREDENTIALS" });
         }
       }
     });
-  } catch (error) {
-    res.status(500).json({ error: "サーバーエラーが発生しました。", details: error.message });
-  }
+  });
 });
 
 // POST /api/logout
 router.post('/logout', (req, res) => {
-  res.json({ message: "ログアウト成功" });
+  res.json({ code: "SUCCESS_LOGOUT" });
 });
 
 module.exports = router;

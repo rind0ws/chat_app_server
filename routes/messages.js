@@ -16,10 +16,6 @@ router.get('/:userId', (req, res) => {
     WHERE from_user_id = ? AND to_user_id = ? AND is_read = 0
   `;
   db.run(updateSql, [targetId, myId], function(err) {
-    if (err) {
-      console.error("既読更新失敗:", err);
-    }
-      
     // データベースからメッセージ履歴を取得
     const sql = `
       SELECT * FROM messages 
@@ -31,8 +27,7 @@ router.get('/:userId', (req, res) => {
     `;
 
     db.all(sql, [myId, targetId, targetId, myId], (err, rows) => {
-    if (err) {
-        console.error("履歴取得失敗:", err);
+      if (err) {
         return res.status(500).json([]);
       }
       res.json(rows || []);
@@ -41,68 +36,91 @@ router.get('/:userId', (req, res) => {
 });
 
 // POST /api/messages (新規メッセージ送信)
-router.post('/', (req, res) => {
+router.post("/", (req, res) => {
   const { from_user_id, to_user_id, message } = req.body;
 
   // バリデーション: 1~500文字まで
   if (!message || message.length < 1 || message.length > 500) {
-    return res.status(400).json({ error: "メッセージは1文字以上500文字以内で入力してください。" });
+    return res.status(400).json({ code: "ERR_INVALID_MESSAGE_LENGTH" });
   }
   // 禁止ワードのチェック
   const NG_WORDS = ["NGWORD"];
   if (NG_WORDS.some(word => message.includes(word))) {
-    return res.status(400).json({ error: "不適切なワードが含まれているため送信できません。" });
+    return res.status(400).json({ code: "ERR_NGWORD_MESSAGE" });
   }
-  // データベースに新しいメッセージを挿入
-  const sql = `
-    INSERT INTO messages (from_user_id, to_user_id, message, is_read, deleted_by_sender, deleted_by_admin) 
-    VALUES (?, ?, ?, 0, 0, 0)
-  `;
-  db.run(sql, [from_user_id, to_user_id, message], function(err) {
-    if (err) {
-      console.error("メッセージ送信エラー:", err);
-      return res.status(500).json({ error: "メッセージの送信に失敗しました。" });
-    }
-    // 新しく生成された ID を返す
-    res.json({ message_id: this.lastID, message: "送信完了" });
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+
+    // データベースに新しいメッセージを挿入
+    const sql = `
+      INSERT INTO messages (from_user_id, to_user_id, message, is_read, deleted_by_sender, deleted_by_admin) 
+      VALUES (?, ?, ?, 0, 0, 0)
+    `;
+
+    db.run(sql, [from_user_id, to_user_id, message], function (err) {
+      if (err) {
+        console.error("メッセージ送信エラー:", err);
+        db.run("ROLLBACK");
+        return res.status(500).json({ code: "ERR_MSG_SEND_FAILED" });
+      }
+      db.run("COMMIT", (commitErr) => {
+        if (commitErr) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
+        }
+        res.json({ message_id: this.lastID, code: "SUCCESS_MSG_SENT" });
+      });
+    });
   });
 });
 
 // DELETE /api/messages/:messageId (メッセージ削除)
-router.delete('/:messageId', (req, res) => {
+router.delete("/:messageId", (req, res) => {
   const messageId = req.params.messageId;
 
-  // 物理削除を行う例（要件に応じて deleted_by_sender などのフラグ更新に書き換えも可能）
-  const sql = `
-    UPDATE messages 
-    SET deleted_by_sender = 1 
-    WHERE message_id = ?
-  `;
-  
-  db.run(sql, [messageId], function(err) {
-    if (err) {
-      console.error("メッセージ削除エラー:", err);
-      return res.status(500).json({ error: "メッセージの削除に失敗しました。" });
-    }
-    
-    if (this.changes === 0) {
-      return res.status(404).json({ error: "削除対象のメッセージが見つかりません。" });
-    }
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
 
-    res.json({ message: "メッセージを削除しました" });
+    const sql = `UPDATE messages SET deleted_by_sender = 1 WHERE message_id = ?`;
+
+    db.run(sql, [messageId], function (err) {
+      if (err) {
+        db.run("ROLLBACK");
+        return res.status(500).json({ code: "ERR_MSG_DELETE_FAILED" });
+      }
+      
+      db.run("COMMIT", (commitErr) => {
+        if (commitErr) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
+        }
+        res.json({ code: "SUCCESS_MSG_DELETED" });
+      });
+    });
   });
 });
 
 // DELETE /api/messages (全メッセージ削除 - 管理者用)
-router.delete('/', (req, res) => {
-  const sql = `UPDATE messages SET deleted_by_admin = 1`;
+router.delete("/", (req, res) => {
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
 
-  db.run(sql, [], function(err) {
-    if (err) {
-      console.error("全メッセージ削除エラー:", err);
-      return res.status(500).json({ error: "全メッセージの削除に失敗しました。" });
-    }
-    res.json({ message: `全 ${this.changes} 件のメッセージを削除しました。` });
+    const sql = `UPDATE messages SET deleted_by_admin = 1`;
+
+    db.run(sql, [], function (err) {
+      if (err) {
+        db.run("ROLLBACK");
+        return res.status(500).json({ code: "ERR_ALL_MSG_DELETE" });
+      }
+      db.run("COMMIT", (commitErr) => {
+        if (commitErr) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
+        }
+        res.json({ code: "SUCCESS_ALL_MSG_DELETED", count: this.changes });
+      });
+    });
   });
 });
 

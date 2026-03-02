@@ -6,74 +6,83 @@ const db = require('../database');
 // ADMIN権限のみアクセス可能なユーザー管理API
 // GET /api/users (一覧取得)
 router.get('/', (req, res) => {
-  const sql = "SELECT user_id, role, is_locked, lock_until FROM users";
-  db.all(sql, [], (err, rows) => {
+  const myId = req.query.myId;
+  const sql = `SELECT user_id, role FROM users WHERE role != 'ADMIN' AND user_id != ?`;
+  db.all(sql, [myId], (err, rows) => {
     if (err) {
-      console.error("ユーザー一覧の取得に失敗:", err);
-      return res.status(500).json({ error: "ユーザー一覧の取得に失敗しました。" });
+      return res.status(500).json({ code: "ERR_USER_FETCH_FAILED" });
     }
-    res.json(rows);
+    res.json(rows || []);
   });
 });
 
 // POST /api/users (新規作成)
 router.post('/', (req, res) => {
   const { user_id, password, role } = req.body;
-  // バリデーション
+
   if (!user_id || !password || !role) {
-    return res.status(400).json({ error: "必須項目が不足しています。" });
+    return res.status(400).json({ code: "ERR_MISSING_REQUIRED_FIELDS" });
   }
-  try {
-    const saltRounds = 10;
-    const password_hash = bcrypt.hashSync(password, saltRounds);
-    // データベースへ挿入
-    const sql = `
-      INSERT INTO users (user_id, password_hash, role, is_locked, lock_until, failed_attempts)
-      VALUES (?, ?, ?, 0, NULL, 0)
-    `;
-    
-    db.run(sql, [user_id, password_hash, role], function(err) {
-      if (err) {
-        if (err.message.includes("UNIQUE constraint failed")) {
-          return res.status(400).json({ error: "このユーザーIDは既に存在します。別のIDを入力してください。" });
+
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    try {
+      const saltRounds = 10;
+      const password_hash = bcrypt.hashSync(password, saltRounds);
+      const sql = `
+        INSERT INTO users (user_id, password_hash, role, is_locked, lock_until, failed_attempts)
+        VALUES (?, ?, ?, 0, NULL, 0)
+      `;
+      
+      db.run(sql, [user_id, password_hash, role], function(err) {
+        if (err) {
+          db.run("ROLLBACK");
+          if (err.message.includes("UNIQUE constraint failed")) {
+            return res.status(400).json({ code: "ERR_USER_ALREADY_EXISTS" });
+          }
+          return res.status(500).json({ code: "ERR_USER_CREATE_FAILED" });
         }
-        console.error("ユーザーの新規作成に失敗:", err);
-        return res.status(500).json({ error: "ユーザーの新規作成に失敗しました。" });
-      }
-      res.json({ message: "ユーザーを新規作成しました", user_id: user_id });
-    });
-  } catch (err) {
-    console.error("ユーザーの新規作成に失敗:", err);
-    res.status(500).json({ error: "ユーザーの新規作成に失敗しました。" });
-  }
+        db.run("COMMIT", (commitErr) => {
+          if (commitErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
+          }
+          res.json({ code: "SUCCESS_USER_CREATED", user_id: user_id });
+        });
+      });
+    } catch (err) {
+      db.run("ROLLBACK");
+      res.status(500).json({ code: "ERR_INTERNAL_SERVER_ERROR" });
+    }
+  });
 });
 
 // DELETE /api/users/:userId (削除)
 router.delete('/:userId', (req, res) => {
-const targetId = req.params.userId;
+  const targetId = req.params.userId;
 
   // 管理者アカウントを削除不可
   if (targetId === 'admin') {
-    return res.status(400).json({ error: "初期管理者アカウントは削除できません。" });
+    return res.status(400).json({ code: "ERR_CANNOT_DELETE_ADMIN" });
   }
 
-  // データベースから削除
-  const sql = "DELETE FROM users WHERE user_id = ?";
-  
-  db.run(sql, [targetId], function(err) {
-    if (err) {
-      console.error("ユーザー削除エラー:", err);
-      return res.status(500).json({ error: "ユーザーの削除に失敗しました。" });
-    }
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    const sql = "DELETE FROM users WHERE user_id = ?";
 
-    console.log(`ユーザー「${targetId}」を削除しました。削除された行数: ${this.changes}`);
-    // 削除対象が存在したかチェック
-    if (this.changes === 0) {
-      return res.status(404).json({ error: "指定されたユーザーが見つかりませんでした。" });
-    }
+    db.run(sql, [targetId], function(err) {
+      if (err) {
+        return res.status(500).json({ code: "ERR_USER_DELETE_FAILED" });
+      }
 
-    // 成功レスポンス
-    res.json({ message: `ユーザー「${targetId}」を削除しました` });
+      db.run("COMMIT", (commitErr) => {
+        if (commitErr) {
+          db.run("ROLLBACK");
+          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
+        }
+        res.json({ code: "SUCCESS_USER_DELETED" });
+      });
+    });
   });
 });
 
