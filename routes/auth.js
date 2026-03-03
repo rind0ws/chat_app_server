@@ -27,8 +27,8 @@ router.post('/login', (req, res) => {
   db.serialize(() => {
     db.get("SELECT * FROM users WHERE user_id = ?", [user_id], async (err, user) => {
 
-      if (err) return res.status(500).json({ code: "ERR_DB_ERROR" });
-      if (!user) return res.status(401).json({ code: "ERR_INVALID_CREDENTIALS" });
+      if (err) return res.status(500).json({ code: "ERR_INTERNAL_SERVER_ERROR" });
+      
       const now = new Date();
 
       // アカウントロックの確認

@@ -6,9 +6,22 @@ const db = require('../database');
 // ADMIN権限のみアクセス可能なユーザー管理API
 // GET /api/users (一覧取得)
 router.get('/', (req, res) => {
-  const myId = req.query.myId;
-  const sql = `SELECT user_id, role FROM users WHERE role != 'ADMIN' AND user_id != ?`;
-  db.all(sql, [myId], (err, rows) => {
+  const { myId, mode } = req.query;
+
+  let sql = "";
+  let params = [];
+
+  if (mode === 'chat') {
+    // 【チャット画面】自身と管理者を除外
+    sql = `SELECT user_id, role FROM users WHERE role != 'ADMIN' AND user_id != ?`;
+    params = [myId];
+  } else {
+    // 【管理画面】管理者以外の全ユーザーを返す
+    sql = `SELECT user_id, role FROM users WHERE role != 'ADMIN'`;
+    params = [];
+  }
+
+  db.all(sql, params, (err, rows) => {
     if (err) {
       return res.status(500).json({ code: "ERR_USER_FETCH_FAILED" });
     }
