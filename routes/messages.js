@@ -4,33 +4,39 @@ const db = require('../database');
 
 // GET /api/messages/:userId (履歴取得)
 router.get('/:userId', (req, res) => {
-  const myId = req.query.myId;
   const targetId = req.params.userId;
+  const { myId, limit = 10, offset = 0 } = req.query;
 
   if (!myId) {
     return res.status(400).json([]);
   }
-  const updateSql = `
-    UPDATE messages 
-    SET is_read = 1 
-    WHERE from_user_id = ? AND to_user_id = ? AND is_read = 0
-  `;
-  db.run(updateSql, [targetId, myId], function(err) {
-    // データベースからメッセージ履歴を取得
-    const sql = `
-      SELECT * FROM messages 
-      WHERE ((from_user_id = ? AND to_user_id = ?) 
-        OR (from_user_id = ? AND to_user_id = ?))
-        AND deleted_by_sender = 0
-        AND deleted_by_admin = 0
-      ORDER BY created_at ASC
+  db.serialize(() => {
+    const updateSql = `
+      UPDATE messages 
+      SET is_read = 1 
+      WHERE from_user_id = ? AND to_user_id = ? AND is_read = 0
     `;
 
-    db.all(sql, [myId, targetId, targetId, myId], (err, rows) => {
-      if (err) {
-        return res.status(500).json([]);
-      }
-      res.json(rows || []);
+    db.run(updateSql, [targetId, myId], function(err) {
+      // データベースからメッセージ履歴を取得
+      const sql = `
+        SELECT * FROM (
+          SELECT * FROM messages 
+          WHERE ((from_user_id = ? AND to_user_id = ?) 
+            OR (from_user_id = ? AND to_user_id = ?))
+            AND deleted_by_sender = 0
+            AND deleted_by_admin = 0
+          ORDER BY created_at DESC 
+          LIMIT ? OFFSET ?
+        ) ORDER BY created_at ASC
+      `;
+
+      db.all(sql, [myId, targetId, targetId, myId, parseInt(limit), parseInt(offset)], (err, rows) => {
+        if (err) {
+          return res.status(500).json([]);
+        }
+        res.json(rows || []);
+      });
     });
   });
 });
