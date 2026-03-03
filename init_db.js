@@ -38,7 +38,9 @@ async function init() {
     // 管理者アカウント
     stmt.run("admin", adminHash, "ADMIN", 0, null);
     // 一般ユーザーアカウント
-    stmt.run("user1", userHash, "USER", 0, null);
+    for (let i = 1; i <= 50; i++) {
+      stmt.run(`user${i}`, userHash, "USER", 0, null);
+    }
     
     stmt.finalize();
     console.log("データベースの初期化が完了しました。");
