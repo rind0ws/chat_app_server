@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const db = require('../database');
+const authenticate = require('../common/hash');
 
 // ADMIN権限のみアクセス可能なユーザー管理API
 // GET /api/users (一覧取得)
-router.get('/', (req, res) => {
+router.get('/', authenticate, (req, res) => {
   const { myId, mode } = req.query;
 
   let sql = "";
@@ -30,7 +31,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/users (新規作成)
-router.post('/', (req, res) => {
+router.post('/', authenticate, (req, res) => {
   const { user_id, password, role } = req.body;
 
   if (!user_id || !password || !role) {
@@ -71,7 +72,7 @@ router.post('/', (req, res) => {
 });
 
 // DELETE /api/users/:userId (削除)
-router.delete('/:userId', (req, res) => {
+router.delete('/:userId', authenticate, (req, res) => {
   const targetId = req.params.userId;
 
   // 管理者アカウントを削除不可

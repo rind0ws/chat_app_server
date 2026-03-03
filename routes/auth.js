@@ -11,6 +11,7 @@ const LOCK_TIME_MINUTES = 30;
 // POST /api/login
 router.post('/login', (req, res) => {
   const { user_id, password } = req.body;
+  const SECRET = "secret_password";
 
   // 入力内容のバリデーション
   if (
@@ -53,10 +54,13 @@ router.post('/login', (req, res) => {
         // 認証成功：失敗カウントをリセット
         db.run("UPDATE users SET is_locked = 0, lock_until = NULL WHERE user_id = ?", [user_id]);
         
-        // ランダムトークンの生成
-        const randomToken = uuidv4();
+        const crypto = require('crypto');
+        const sessionToken = crypto.createHash('sha256')
+          .update(user_id + SECRET)
+          .digest('hex');
+        
         const prefix = user.role === 'ADMIN' ? 'adm_' : 'usr_';
-        const fullToken = `${prefix}${randomToken}`;
+        const fullToken = `${prefix}${sessionToken}`;
 
         // クッキーにトークンをセット
         res.cookie('auth_token', fullToken, {

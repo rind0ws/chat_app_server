@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const authenticate = require('../common/hash');
 
 // GET /api/messages/:userId (履歴取得)
-router.get('/:userId', (req, res) => {
+router.get('/:userId', authenticate, (req, res) => {
   const targetId = req.params.userId;
   const { myId, limit = 10, offset = 0 } = req.query;
 
@@ -42,7 +43,7 @@ router.get('/:userId', (req, res) => {
 });
 
 // POST /api/messages (新規メッセージ送信)
-router.post("/", (req, res) => {
+router.post("/", authenticate, (req, res) => {
   const { from_user_id, to_user_id, message } = req.body;
 
   // バリデーション: 1~500文字まで
@@ -82,7 +83,7 @@ router.post("/", (req, res) => {
 });
 
 // DELETE /api/messages/:messageId (メッセージ削除)
-router.delete("/:messageId", (req, res) => {
+router.delete("/:messageId", authenticate, (req, res) => {
   const messageId = req.params.messageId;
 
   db.serialize(() => {
@@ -108,7 +109,7 @@ router.delete("/:messageId", (req, res) => {
 });
 
 // DELETE /api/messages (全メッセージ削除 - 管理者用)
-router.delete("/", (req, res) => {
+router.delete("/", authenticate, (req, res) => {
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
 
