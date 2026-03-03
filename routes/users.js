@@ -43,8 +43,8 @@ router.post('/', (req, res) => {
       const saltRounds = 10;
       const password_hash = bcrypt.hashSync(password, saltRounds);
       const sql = `
-        INSERT INTO users (user_id, password_hash, role, is_locked, lock_until, failed_attempts)
-        VALUES (?, ?, ?, 0, NULL, 0)
+        INSERT INTO users (user_id, password_hash, role, is_locked, lock_until)
+        VALUES (?, ?, ?, 0, NULL)
       `;
       
       db.run(sql, [user_id, password_hash, role], function(err) {
