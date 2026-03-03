@@ -39,46 +39,34 @@ router.post('/', (req, res) => {
 
   db.serialize(() => {
     db.run("BEGIN TRANSACTION");
-    db.get("SELECT COUNT(*) as count FROM users", [], (err, row) => {
-      if (err) {
-        db.run("ROLLBACK");
-        return res.status(500).json({ code: "ERR_INTERNAL_SERVER_ERROR" });
-      }
-
-      // 2. 制限チェック (50件以上であればエラー)
-      if (row.count > 50) {
-        db.run("ROLLBACK");
-        return res.status(400).json({ code: "ERR_USER_LIMIT_EXCEEDED" });
-      }
-      try {
-        const saltRounds = 10;
-        const password_hash = bcrypt.hashSync(password, saltRounds);
-        const sql = `
-          INSERT INTO users (user_id, password_hash, role, is_locked, lock_until)
-          VALUES (?, ?, ?, 0, NULL)
-        `;
-        
-        db.run(sql, [user_id, password_hash, role], function(err) {
-          if (err) {
-            db.run("ROLLBACK");
-            if (err.message.includes("UNIQUE constraint failed")) {
-              return res.status(400).json({ code: "ERR_USER_ALREADY_EXISTS" });
-            }
-            return res.status(500).json({ code: "ERR_USER_CREATE_FAILED" });
+    try {
+      const saltRounds = 10;
+      const password_hash = bcrypt.hashSync(password, saltRounds);
+      const sql = `
+        INSERT INTO users (user_id, password_hash, role, is_locked, lock_until)
+        VALUES (?, ?, ?, 0, NULL)
+      `;
+      
+      db.run(sql, [user_id, password_hash, role], function(err) {
+        if (err) {
+          db.run("ROLLBACK");
+          if (err.message.includes("UNIQUE constraint failed")) {
+            return res.status(400).json({ code: "ERR_USER_ALREADY_EXISTS" });
           }
-          db.run("COMMIT", (commitErr) => {
-            if (commitErr) {
-              db.run("ROLLBACK");
-              return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
-            }
-            res.json({ code: "SUCCESS_USER_CREATED", user_id: user_id });
-          });
+          return res.status(500).json({ code: "ERR_USER_CREATE_FAILED" });
+        }
+        db.run("COMMIT", (commitErr) => {
+          if (commitErr) {
+            db.run("ROLLBACK");
+            return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
+          }
+          res.json({ code: "SUCCESS_USER_CREATED", user_id: user_id });
         });
-      } catch (err) {
-        db.run("ROLLBACK");
-        res.status(500).json({ code: "ERR_INTERNAL_SERVER_ERROR" });
-      }
-    });
+      });
+    } catch (err) {
+      db.run("ROLLBACK");
+      res.status(500).json({ code: "ERR_INTERNAL_SERVER_ERROR" });
+    }
   });
 });
 
