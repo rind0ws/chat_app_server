@@ -60,8 +60,6 @@ router.post("/", authenticate, (req, res) => {
   }
 
   db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
-
     // データベースに新しいメッセージを挿入
     const sql = `
       INSERT INTO messages (from_user_id, to_user_id, message, is_read, deleted_by_sender, deleted_by_admin) 
@@ -71,16 +69,9 @@ router.post("/", authenticate, (req, res) => {
     db.run(sql, [from_user_id, to_user_id, message], function (err) {
       if (err) {
         console.error("メッセージ送信エラー:", err);
-        db.run("ROLLBACK");
         return res.status(500).json({ code: "ERR_MSG_SEND_FAILED" });
       }
-      db.run("COMMIT", (commitErr) => {
-        if (commitErr) {
-          db.run("ROLLBACK");
-          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
-        }
-        res.json({ message_id: this.lastID, code: "SUCCESS_MSG_SENT" });
-      });
+      res.json({ message_id: this.lastID, code: "SUCCESS_MSG_SENT" });
     });
   });
 });
@@ -90,23 +81,13 @@ router.delete("/:messageId", authenticate, (req, res) => {
   const messageId = req.params.messageId;
 
   db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
-
     const sql = `UPDATE messages SET deleted_by_sender = 1 WHERE message_id = ?`;
 
     db.run(sql, [messageId], function (err) {
       if (err) {
-        db.run("ROLLBACK");
         return res.status(500).json({ code: "ERR_MSG_DELETE_FAILED" });
       }
-      
-      db.run("COMMIT", (commitErr) => {
-        if (commitErr) {
-          db.run("ROLLBACK");
-          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
-        }
-        res.json({ code: "SUCCESS_MSG_DELETED" });
-      });
+      res.json({ code: "SUCCESS_MSG_DELETED" });
     });
   });
 });
@@ -114,22 +95,13 @@ router.delete("/:messageId", authenticate, (req, res) => {
 // DELETE /api/messages (全メッセージ削除 - 管理者用)
 router.delete("/", authenticate, (req, res) => {
   db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
-
     const sql = `UPDATE messages SET deleted_by_admin = 1`;
 
     db.run(sql, [], function (err) {
       if (err) {
-        db.run("ROLLBACK");
         return res.status(500).json({ code: "ERR_ALL_MSG_DELETE" });
       }
-      db.run("COMMIT", (commitErr) => {
-        if (commitErr) {
-          db.run("ROLLBACK");
-          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
-        }
-        res.json({ code: "SUCCESS_ALL_MSG_DELETED", count: this.changes });
-      });
+      res.json({ code: "SUCCESS_ALL_MSG_DELETED", count: this.changes });
     });
   });
 });

@@ -31,10 +31,8 @@ router.post('/', authenticate, (req, res) => {
   }
 
   db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
     try {
-      const saltRounds = 10;
-      const password_hash = bcrypt.hashSync(password, saltRounds);
+      const password_hash = bcrypt.hashSync(password, 10);
       const sql = `
         INSERT INTO users (user_id, password_hash, role, is_locked, lock_until)
         VALUES (?, ?, ?, 0, NULL)
@@ -42,22 +40,14 @@ router.post('/', authenticate, (req, res) => {
       
       db.run(sql, [user_id, password_hash, role], function(err) {
         if (err) {
-          db.run("ROLLBACK");
           if (err.message.includes("UNIQUE constraint failed")) {
             return res.status(400).json({ code: "ERR_USER_ALREADY_EXISTS" });
           }
           return res.status(500).json({ code: "ERR_USER_CREATE_FAILED" });
         }
-        db.run("COMMIT", (commitErr) => {
-          if (commitErr) {
-            db.run("ROLLBACK");
-            return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
-          }
-          res.json({ code: "SUCCESS_USER_CREATED", user_id: user_id });
-        });
+        res.json({ code: "SUCCESS_USER_CREATED", user_id: user_id });
       });
     } catch (err) {
-      db.run("ROLLBACK");
       res.status(500).json({ code: "ERR_INTERNAL_SERVER_ERROR" });
     }
   });
@@ -73,21 +63,14 @@ router.delete('/:userId', authenticate, (req, res) => {
   }
 
   db.serialize(() => {
-    db.run("BEGIN TRANSACTION");
     const sql = "DELETE FROM users WHERE user_id = ?";
 
     db.run(sql, [targetId], function(err) {
       if (err) {
         return res.status(500).json({ code: "ERR_USER_DELETE_FAILED" });
       }
-
-      db.run("COMMIT", (commitErr) => {
-        if (commitErr) {
-          db.run("ROLLBACK");
-          return res.status(500).json({ code: "ERR_TRANSACTION_COMMIT_FAILED" });
-        }
-        res.json({ code: "SUCCESS_USER_DELETED" });
-      });
+      if (this.changes === 0) return res.status(404).json({ code: "ERR_USER_NOT_FOUND" });
+      res.json({ code: "SUCCESS_USER_DELETED" });
     });
   });
 });
