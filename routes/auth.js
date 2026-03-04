@@ -1,17 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const db = require('../database');
 
 // 設定：最大失敗回数とロック時間（分）
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_TIME_MINUTES = 30;
+const SECRET = "secret_password";
+
+global.sessions = global.sessions || {};
 
 // POST /api/login
 router.post('/login', (req, res) => {
   const { user_id, password } = req.body;
-  const SECRET = "secret_password";
 
   // 入力内容のバリデーション
   if (
@@ -54,13 +56,13 @@ router.post('/login', (req, res) => {
         // 認証成功：失敗カウントをリセット
         db.run("UPDATE users SET is_locked = 0, lock_until = NULL WHERE user_id = ?", [user_id]);
         
-        const crypto = require('crypto');
         const sessionToken = crypto.createHash('sha256')
-          .update(user_id + SECRET)
+          .update(Date.now().toString() + SECRET)
           .digest('hex');
         
         const prefix = user.role === 'ADMIN' ? 'adm_' : 'usr_';
         const fullToken = `${prefix}${sessionToken}`;
+        global.sessions[fullToken] = user.user_id;
 
         // クッキーにトークンをセット
         res.cookie('auth_token', fullToken, {
@@ -97,6 +99,11 @@ router.post('/login', (req, res) => {
 
 // POST /api/logout
 router.post('/logout', (req, res) => {
+    const token = req.cookies.auth_token;
+  if (token && global.sessions[token]) {
+    delete global.sessions[token];
+  }
+  res.cookie('auth_token', '', { maxAge: 0 });
   res.json({ code: "SUCCESS_LOGOUT" });
 });
 

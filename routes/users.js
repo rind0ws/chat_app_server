@@ -7,25 +7,17 @@ const authenticate = require('../common/hash');
 // ADMIN権限のみアクセス可能なユーザー管理API
 // GET /api/users (一覧取得)
 router.get('/', authenticate, (req, res) => {
-  const { myId, mode } = req.query;
+  const myId = req.myId;
+  const { mode } = req.query;
 
-  let sql = "";
-  let params = [];
-
-  if (mode === 'chat') {
-    // 【チャット画面】自身と管理者を除外
-    sql = `SELECT user_id, role FROM users WHERE role != 'ADMIN' AND user_id != ?`;
-    params = [myId];
-  } else {
-    // 【管理画面】管理者以外の全ユーザーを返す
-    sql = `SELECT user_id, role FROM users WHERE role != 'ADMIN'`;
-    params = [];
-  }
+  let sql = (mode === 'chat') 
+    ? `SELECT user_id, role FROM users WHERE role != 'ADMIN' AND user_id != ?`
+    : `SELECT user_id, role FROM users WHERE role != 'ADMIN'`;
+  
+  let params = (mode === 'chat') ? [myId] : [];
 
   db.all(sql, params, (err, rows) => {
-    if (err) {
-      return res.status(500).json({ code: "ERR_USER_FETCH_FAILED" });
-    }
+    if (err) return res.status(500).json([]);
     res.json(rows || []);
   });
 });

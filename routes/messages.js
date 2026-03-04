@@ -6,12 +6,14 @@ const authenticate = require('../common/hash');
 // GET /api/messages/:userId (履歴取得)
 router.get('/:userId', authenticate, (req, res) => {
   const targetId = req.params.userId;
-  const { myId, limit = 10, offset = 0 } = req.query;
+  const myId = req.myId; 
+  const { limit = 10, offset = 0 } = req.query;
 
   if (!myId) {
     return res.status(400).json([]);
   }
   db.serialize(() => {
+    // 既読更新
     const updateSql = `
       UPDATE messages 
       SET is_read = 1 
@@ -44,7 +46,8 @@ router.get('/:userId', authenticate, (req, res) => {
 
 // POST /api/messages (新規メッセージ送信)
 router.post("/", authenticate, (req, res) => {
-  const { from_user_id, to_user_id, message } = req.body;
+  const from_user_id = req.myId;
+  const { to_user_id, message } = req.body;
 
   // バリデーション: 1~500文字まで
   if (!message || message.length < 1 || message.length > 500) {
