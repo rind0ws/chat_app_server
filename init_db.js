@@ -31,6 +31,17 @@ async function init() {
       FOREIGN KEY (from_user_id) REFERENCES users (user_id),
       FOREIGN KEY (to_user_id) REFERENCES users (user_id)
     )`);
+    // unreadsテーブルの作成
+    db.run(`CREATE TABLE IF NOT EXISTS unreads (
+      to_user_id TEXT NOT NULL,
+      from_user_id TEXT NOT NULL,
+      unread_count INTEGER DEFAULT 0,
+      first_unread_id INTEGER,
+      PRIMARY KEY (to_user_id, from_user_id),
+      FOREIGN KEY (to_user_id) REFERENCES users (user_id),
+      FOREIGN KEY (from_user_id) REFERENCES users (user_id),
+      FOREIGN KEY (first_unread_id) REFERENCES messages (message_id)
+    )`);
 
     // テストデータの挿入
     const stmt = db.prepare("INSERT OR REPLACE INTO users (user_id, password_hash, role, is_locked, lock_until) VALUES (?, ?, ?, ?, ?)");
